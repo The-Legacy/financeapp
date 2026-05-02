@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
-import { formatCurrency, formatDate, daysUntil } from '../../lib/formatters'
+import { formatCurrency, formatDate, daysUntil, toLabel } from '../../lib/formatters'
 import type { Charge, Category } from '../../types'
 
 function ChargeForm({ initial, categories, onSave, onClose }: {
@@ -36,7 +36,7 @@ function ChargeForm({ initial, categories, onSave, onClose }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Expected Amount</label>
-              <input type="number" step="0.01" className="input" value={form.expected_amount ?? ''} onChange={e => set('expected_amount', parseFloat(e.target.value))} required />
+              <input type="number" step="0.01" className="input" value={form.expected_amount ?? ''} onChange={e => set('expected_amount', e.target.value === '' ? 0 : parseFloat(e.target.value))} required />
             </div>
             <div>
               <label className="label">Due Date</label>
@@ -82,7 +82,7 @@ function StatusBadge({ status }: { status: string }) {
     paid: 'badge-green',
     canceled: 'badge-gray',
   }
-  return <span className={map[status] ?? 'badge-gray'}>{status.replace('_', ' ')}</span>
+  return <span className={map[status] ?? 'badge-gray'}>{toLabel(status)}</span>
 }
 
 export default function Charges() {

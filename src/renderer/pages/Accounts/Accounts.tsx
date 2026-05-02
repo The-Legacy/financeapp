@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
-import { formatCurrency } from '../../lib/formatters'
+import { formatCurrency, toLabel } from '../../lib/formatters'
 import { useConfirm } from '../../components/ConfirmDialog'
 import type { Account } from '../../types'
 
@@ -16,6 +16,7 @@ function AccountForm({ initial, onSave, onClose }: {
   })
   const [saving, setSaving] = useState(false)
   const set = (k: keyof Account, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const isCC = form.type === 'credit_card'
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
@@ -23,8 +24,8 @@ function AccountForm({ initial, onSave, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-md">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="card w-full max-w-md my-4">
         <h2 className="text-lg font-semibold mb-4">{initial?.id ? 'Edit' : 'New'} Account</h2>
         <form onSubmit={submit} className="space-y-4">
           <div>
@@ -35,14 +36,42 @@ function AccountForm({ initial, onSave, onClose }: {
             <div>
               <label className="label">Type</label>
               <select className="input" value={form.type ?? 'checking'} onChange={e => set('type', e.target.value as any)}>
-                {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
+                {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{toLabel(t)}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Starting Balance</label>
-              <input type="number" step="0.01" className="input" value={form.starting_balance ?? 0} onChange={e => set('starting_balance', parseFloat(e.target.value))} />
+              <input type="number" step="0.01" className="input" value={form.starting_balance ?? 0} onChange={e => set('starting_balance', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
             </div>
           </div>
+          {isCC && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Credit Limit</label>
+                  <input type="number" step="0.01" min="0" className="input" value={form.credit_limit ?? ''} onChange={e => set('credit_limit', e.target.value ? parseFloat(e.target.value) : null)} placeholder="5000" />
+                </div>
+                <div>
+                  <label className="label">APR (%)</label>
+                  <input type="number" step="0.01" min="0" className="input" value={form.apr ?? ''} onChange={e => set('apr', e.target.value ? parseFloat(e.target.value) : null)} placeholder="24.99" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="label">Minimum Payment</label>
+                  <input type="number" step="0.01" min="0" className="input" value={form.minimum_payment ?? ''} onChange={e => set('minimum_payment', e.target.value ? parseFloat(e.target.value) : null)} placeholder="25" />
+                </div>
+                <div>
+                  <label className="label">Due Day</label>
+                  <input type="number" min="1" max="31" className="input" value={form.due_day ?? ''} onChange={e => set('due_day', e.target.value ? parseInt(e.target.value) : null)} placeholder="15" />
+                </div>
+                <div>
+                  <label className="label">Statement Closes</label>
+                  <input type="number" min="1" max="31" className="input" value={form.statement_close_day ?? ''} onChange={e => set('statement_close_day', e.target.value ? parseInt(e.target.value) : null)} placeholder="8" />
+                </div>
+              </div>
+            </>
+          )}
           <div>
             <label className="label">Institution (optional)</label>
             <input className="input" value={form.institution ?? ''} onChange={e => set('institution', e.target.value)} />
@@ -121,7 +150,7 @@ export default function Accounts() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-medium t-text">{a.name}</span>
-                <span className={`text-xs font-medium ${typeColor(a.type)}`}>{a.type.replace('_', ' ')}</span>
+                <span className={`text-xs font-medium ${typeColor(a.type)}`}>{toLabel(a.type)}</span>
               </div>
               {a.institution && <div className="text-xs t-muted mt-0.5">{a.institution}</div>}
             </div>

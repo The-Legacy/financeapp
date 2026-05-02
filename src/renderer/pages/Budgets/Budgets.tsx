@@ -94,7 +94,7 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
                 className="input w-28 text-right"
                 defaultValue={item.monthly_limit}
                 onBlur={async (e) => {
-                  await handleUpsert({ budget_profile_id: profile.id!, category_id: item.category_id, monthly_limit: parseFloat(e.target.value), notes: item.notes })
+                  await handleUpsert({ budget_profile_id: profile.id!, category_id: item.category_id, monthly_limit: e.target.value === '' ? 0 : parseFloat(e.target.value), notes: item.notes })
                 }}
               />
               <button className="btn-danger py-1 px-2 text-xs" onClick={() => handleDelete(item.id!)}>✕</button>
@@ -114,7 +114,7 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
           <div className="w-28">
             <label className="label">Monthly Limit</label>
             <input type="number" step="0.01" min="0" className="input" value={adding.monthly_limit}
-              onChange={e => setAdding(a => ({ ...a, monthly_limit: parseFloat(e.target.value) }))} />
+              onChange={e => setAdding(a => ({ ...a, monthly_limit: e.target.value === '' ? 0 : parseFloat(e.target.value) }))} />
           </div>
           <button className="btn-primary" onClick={async () => {
             if (!adding.category_id) return

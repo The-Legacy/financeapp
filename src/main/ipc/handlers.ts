@@ -1,5 +1,5 @@
 import type { IpcMain } from 'electron'
-import { dialog, BrowserWindow } from 'electron'
+import { dialog, BrowserWindow, app } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
 import {
   getTransactions, createTransaction, updateTransaction, deleteTransaction,
@@ -115,8 +115,10 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return Object.fromEntries(rows.map(r => [r.key, r.value]))
   })
 
-  // Seed demo data
-  handle(ipcMain, 'dev:seed', () => seedDemoData())
+  // Seed demo data (dev only — never exposed in packaged builds)
+  if (!app.isPackaged) {
+    handle(ipcMain, 'dev:seed', () => seedDemoData())
+  }
 
   // CSV Import — registered directly to access event.sender for reliable window ref
   ipcMain.handle('data:import:csv', async (event) => {

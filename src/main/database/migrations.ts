@@ -240,6 +240,58 @@ export function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_transactions_deleted     ON transactions(deleted);
   `)
 
+  // Additive migrations — safe to run on existing databases
+  const addCol = (table: string, col: string, def: string) => {
+    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`) } catch { /* already exists */ }
+  }
+  addCol('accounts', 'credit_limit',       'REAL')
+  addCol('accounts', 'apr',                'REAL')
+  addCol('accounts', 'minimum_payment',    'REAL')
+  addCol('accounts', 'due_day',            'INTEGER')
+  addCol('accounts', 'statement_close_day','INTEGER')
+
+  // Migration: add cc_payment to transactions type CHECK constraint (requires table recreation)
+  const txSchemaRow = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='transactions'"
+  ).get() as { sql: string } | undefined
+  if (txSchemaRow && !txSchemaRow.sql.includes("'cc_payment'")) {
+    db.pragma('foreign_keys = OFF')
+    const migrateTransactions = db.transaction(() => {
+      db.prepare(`
+        CREATE TABLE transactions_v2 (
+          id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+          date                 TEXT NOT NULL,
+          type                 TEXT NOT NULL CHECK(type IN ('income','expense','cc_payment','investment_buy','investment_sell','transfer','loan_payment','charge_payment','refund','adjustment')),
+          category_id          INTEGER REFERENCES categories(id),
+          subcategory          TEXT,
+          description          TEXT NOT NULL,
+          amount               REAL NOT NULL,
+          account_id           INTEGER REFERENCES accounts(id),
+          payment_method       TEXT,
+          notes                TEXT,
+          linked_loan_id       INTEGER,
+          linked_charge_id     INTEGER,
+          linked_investment_id INTEGER,
+          deleted              INTEGER NOT NULL DEFAULT 0,
+          created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `).run()
+      db.prepare('INSERT INTO transactions_v2 SELECT * FROM transactions').run()
+      db.prepare('DROP TABLE transactions').run()
+      db.prepare('ALTER TABLE transactions_v2 RENAME TO transactions').run()
+    })
+    migrateTransactions()
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_transactions_date        ON transactions(date);
+      CREATE INDEX IF NOT EXISTS idx_transactions_type        ON transactions(type);
+      CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
+      CREATE INDEX IF NOT EXISTS idx_transactions_account_id  ON transactions(account_id);
+      CREATE INDEX IF NOT EXISTS idx_transactions_deleted     ON transactions(deleted);
+    `)
+    db.pragma('foreign_keys = ON')
+  }
+
   // Seed default categories if none exist
   const count = (db.prepare('SELECT COUNT(*) as c FROM categories').get() as any).c
   if (count === 0) {

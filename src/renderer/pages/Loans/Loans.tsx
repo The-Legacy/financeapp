@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
-import { formatCurrency } from '../../lib/formatters'
+import { formatCurrency, toLabel } from '../../lib/formatters'
 import { useConfirm } from '../../components/ConfirmDialog'
 import type { Loan } from '../../types'
 
@@ -32,25 +32,25 @@ function LoanForm({ initial, onSave, onClose }: {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Original Principal</label>
-              <input type="number" step="0.01" className="input" value={form.original_principal ?? ''} onChange={e => set('original_principal', parseFloat(e.target.value))} required />
+              <input type="number" step="0.01" className="input" value={form.original_principal ?? ''} onChange={e => set('original_principal', e.target.value === '' ? 0 : parseFloat(e.target.value))} required />
             </div>
             <div>
               <label className="label">Current Balance</label>
-              <input type="number" step="0.01" className="input" value={form.current_balance ?? ''} onChange={e => set('current_balance', parseFloat(e.target.value))} required />
+              <input type="number" step="0.01" className="input" value={form.current_balance ?? ''} onChange={e => set('current_balance', e.target.value === '' ? 0 : parseFloat(e.target.value))} required />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="label">Interest Rate %</label>
-              <input type="number" step="0.01" className="input" value={form.interest_rate ?? ''} onChange={e => set('interest_rate', parseFloat(e.target.value))} />
+              <input type="number" step="0.01" className="input" value={form.interest_rate ?? ''} onChange={e => set('interest_rate', e.target.value ? parseFloat(e.target.value) : null)} />
             </div>
             <div>
               <label className="label">Min Payment</label>
-              <input type="number" step="0.01" className="input" value={form.minimum_payment ?? ''} onChange={e => set('minimum_payment', parseFloat(e.target.value))} />
+              <input type="number" step="0.01" className="input" value={form.minimum_payment ?? ''} onChange={e => set('minimum_payment', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
             </div>
             <div>
               <label className="label">Due Day</label>
-              <input type="number" min="1" max="31" className="input" value={form.due_day ?? ''} onChange={e => set('due_day', parseInt(e.target.value))} />
+              <input type="number" min="1" max="31" className="input" value={form.due_day ?? ''} onChange={e => set('due_day', e.target.value ? parseInt(e.target.value) : null)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -254,7 +254,7 @@ export default function Loans() {
             {inactive.map(l => (
               <div key={l.id} className="card flex justify-between items-center">
                 <span className="text-sm t-muted">{l.name}</span>
-                <span className="badge-gray">{l.status.replace('_', ' ')}</span>
+                <span className="badge-gray">{toLabel(l.status)}</span>
               </div>
             ))}
           </div>

@@ -71,21 +71,42 @@ export function getTransactionById(id: number): Transaction | undefined {
 
 export function createTransaction(tx: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>): Transaction {
   const db = getDb()
+  const params = {
+    date: tx.date,
+    type: tx.type,
+    category_id: tx.category_id ?? null,
+    subcategory: tx.subcategory ?? null,
+    description: tx.description,
+    amount: tx.amount,
+    account_id: tx.account_id ?? null,
+    payment_method: tx.payment_method ?? null,
+    notes: tx.notes ?? null,
+    linked_loan_id: tx.linked_loan_id ?? null,
+    linked_charge_id: tx.linked_charge_id ?? null,
+    linked_investment_id: tx.linked_investment_id ?? null,
+  }
   const result = db.prepare(`
     INSERT INTO transactions (date, type, category_id, subcategory, description, amount, account_id,
       payment_method, notes, linked_loan_id, linked_charge_id, linked_investment_id)
     VALUES (@date, @type, @category_id, @subcategory, @description, @amount, @account_id,
       @payment_method, @notes, @linked_loan_id, @linked_charge_id, @linked_investment_id)
-  `).run(tx)
+  `).run(params)
   return getTransactionById(result.lastInsertRowid as number)!
 }
+
+const ALLOWED_TX_UPDATE_FIELDS = new Set([
+  'date', 'type', 'category_id', 'subcategory', 'description', 'amount',
+  'account_id', 'payment_method', 'notes', 'linked_loan_id', 'linked_charge_id',
+  'linked_investment_id', 'deleted',
+])
 
 export function updateTransaction(id: number, tx: Partial<Transaction>): Transaction {
   const db = getDb()
   const fields = Object.keys(tx)
-    .filter(k => !['id', 'created_at', 'updated_at', 'category_name', 'account_name'].includes(k))
+    .filter(k => ALLOWED_TX_UPDATE_FIELDS.has(k))
     .map(k => `${k} = @${k}`)
     .join(', ')
+  if (!fields) throw new Error('No valid fields to update')
   db.prepare(`UPDATE transactions SET ${fields}, updated_at = datetime('now') WHERE id = @id`)
     .run({ ...tx, id })
   return getTransactionById(id)!

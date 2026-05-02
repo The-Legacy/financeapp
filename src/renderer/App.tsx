@@ -8,11 +8,12 @@ const Budgets      = lazy(() => import('./pages/Budgets/Budgets'))
 const Loans        = lazy(() => import('./pages/Loans/Loans'))
 const Charges      = lazy(() => import('./pages/Charges/Charges'))
 const Accounts     = lazy(() => import('./pages/Accounts/Accounts'))
+const CreditCards  = lazy(() => import('./pages/CreditCards/CreditCards'))
 const Settings     = lazy(() => import('./pages/Settings/Settings'))
 const Manage       = lazy(() => import('./pages/Manage/Manage'))
 
 // Minimal stroke-based SVG icons (24×24 viewBox, 1.75px stroke)
-type IconName = 'dashboard' | 'transactions' | 'budgets' | 'loans' | 'charges' | 'accounts' | 'manage' | 'settings'
+type IconName = 'dashboard' | 'transactions' | 'budgets' | 'loans' | 'charges' | 'accounts' | 'credit-cards' | 'manage' | 'settings'
 
 function Icon({ name }: { name: IconName }) {
   const sp = { fill: 'none', stroke: 'currentColor', strokeWidth: '1.75', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
@@ -30,6 +31,8 @@ function Icon({ name }: { name: IconName }) {
       return <S><rect x="3" y="4" width="18" height="18" rx="1"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></S>
     case 'accounts':
       return <S><rect x="2" y="7" width="20" height="14" rx="1"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></S>
+    case 'credit-cards':
+      return <S><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/><line x1="6" y1="15" x2="6" y2="15" strokeWidth="3" strokeLinecap="round"/><line x1="10" y1="15" x2="13" y2="15" strokeWidth="3" strokeLinecap="round"/></S>
     case 'manage':
       return <S><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="15" y2="17"/><circle cx="18.5" cy="17" r="2.5"/></S>
     case 'settings':
@@ -43,8 +46,9 @@ const NAV: { to: string; label: string; icon: IconName }[] = [
   { to: '/budgets',      label: 'Budgets',      icon: 'budgets'      },
   { to: '/loans',        label: 'Loans',        icon: 'loans'        },
   { to: '/charges',      label: 'Charges',      icon: 'charges'      },
-  { to: '/accounts',     label: 'Accounts',     icon: 'accounts'     },
-  { to: '/manage',       label: 'Manage',       icon: 'manage'       },
+  { to: '/accounts',     label: 'Accounts',      icon: 'accounts'     },
+  { to: '/credit-cards', label: 'Credit Cards',  icon: 'credit-cards' },
+  { to: '/manage',       label: 'Manage',        icon: 'manage'       },
   { to: '/settings',     label: 'Settings',     icon: 'settings'     },
 ]
 
@@ -117,6 +121,7 @@ export default function App() {
             <Route path="/loans"        element={<Loans />} />
             <Route path="/charges"      element={<Charges />} />
             <Route path="/accounts"     element={<Accounts />} />
+            <Route path="/credit-cards" element={<CreditCards />} />
             <Route path="/manage"       element={<Manage />} />
             <Route path="/settings"     element={<Settings />} />
             <Route path="*"             element={<Navigate to="/" replace />} />

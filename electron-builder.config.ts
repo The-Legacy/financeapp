@@ -4,7 +4,7 @@ const config: Configuration = {
   appId: 'com.desktopfinanceapp.app',
   productName: 'Desktop Finance App',
   directories: {
-    output: 'dist',
+    output: 'release',
     buildResources: 'resources'
   },
   files: ['dist', 'node_modules'],

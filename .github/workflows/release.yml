@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    branches: [master, main]
+
+# Required so the workflow can create/update GitHub releases and tags
+permissions:
+  contents: write
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Build the app on each target OS in parallel
+  # ──────────────────────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # better-sqlite3 is a native module — must be rebuilt against
+      # the exact Electron version before packaging
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild -f -w better-sqlite3
+
+      # Compile renderer / main / preload via electron-vite
+      - name: Build (electron-vite)
+        run: npm run build
+
+      # ── Per-platform packaging ──────────────────────────────
+
+      - name: Package — Linux (AppImage + deb)
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --linux --publish never
+
+      - name: Package — macOS (dmg + zip)
+        if: matrix.platform == 'mac'
+        run: npx electron-builder --mac --publish never
+        env:
+          # Disable code-signing lookup; unsigned builds work fine for personal use.
+          # To enable signing: add CSC_LINK + CSC_KEY_PASSWORD secrets.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Package — Windows (installer + portable)
+        if: matrix.platform == 'win'
+        run: npx electron-builder --win --publish never
+        # Windows signing is skipped automatically when no cert is configured.
+        # To enable: add WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD secrets.
+
+      # ── Upload platform artifacts for the release job ───────
+
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: warn
+
+      - name: Upload macOS artifacts
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: warn
+
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: win
+          path: release/*.exe
+          if-no-files-found: warn
+
+  # ──────────────────────────────────────────────────────────
+  # Collect artifacts and publish a GitHub Release
+  # ──────────────────────────────────────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      # Merges linux/, mac/, win/ artifact directories into one flat folder
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+
+      # Creates or updates the release for this version tag.
+      # If you push to master twice without bumping the version, the
+      # existing release assets are replaced with the new build.
+      # Bump package.json "version" to mint a new permanent release.
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}
+          name: Desktop Finance App v${{ steps.pkg.outputs.version }}
+          make_latest: true
+          body: |
+            ## Downloads
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | **Windows** | `*-Setup.exe` | NSIS installer (recommended) |
+            | **Windows** | `*-Portable.exe` | No installation needed |
+            | **macOS** | `*.dmg` | Disk image — drag to Applications |
+            | **Linux** | `*.AppImage` | Portable — `chmod +x` then run |
+            | **Linux** | `*.deb` | Debian / Ubuntu package |
+
+            > **Note:** Binaries are unsigned. macOS will show a security prompt — right-click the `.dmg` and choose **Open** to bypass it. Windows may show a SmartScreen warning — click **More info → Run anyway**.
+
+            Built from [`${{ github.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+          files: release-files/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

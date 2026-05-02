@@ -53,12 +53,15 @@ export function createBudgetProfile(profile: Omit<BudgetProfile, 'id' | 'created
   return db.prepare('SELECT * FROM budget_profiles WHERE id = ?').get(result.lastInsertRowid) as BudgetProfile
 }
 
+const ALLOWED_PROFILE_UPDATE_FIELDS = new Set(['name', 'description', 'season_type'])
+
 export function updateBudgetProfile(id: number, profile: Partial<BudgetProfile>): BudgetProfile {
   const db = getDb()
   const fields = Object.keys(profile)
-    .filter(k => !['id', 'created_at', 'updated_at'].includes(k))
+    .filter(k => ALLOWED_PROFILE_UPDATE_FIELDS.has(k))
     .map(k => `${k} = @${k}`)
     .join(', ')
+  if (!fields) throw new Error('No valid fields to update')
   db.prepare(`UPDATE budget_profiles SET ${fields}, updated_at = datetime('now') WHERE id = @id`).run({ ...profile, id })
   return db.prepare('SELECT * FROM budget_profiles WHERE id = ?').get(id) as BudgetProfile
 }

@@ -1,7 +1,7 @@
 export interface Transaction {
   id?: number
   date: string
-  type: 'income' | 'expense' | 'investment_buy' | 'investment_sell' | 'transfer' | 'loan_payment' | 'charge_payment' | 'refund' | 'adjustment'
+  type: 'income' | 'expense' | 'cc_payment' | 'investment_buy' | 'investment_sell' | 'transfer' | 'loan_payment' | 'charge_payment' | 'refund' | 'adjustment'
   category_id?: number | null
   subcategory?: string
   description: string
@@ -38,6 +38,12 @@ export interface Account {
   notes?: string
   active?: number
   current_balance?: number
+  // Credit card specific
+  credit_limit?: number | null
+  apr?: number | null
+  minimum_payment?: number | null
+  due_day?: number | null
+  statement_close_day?: number | null
 }
 
 export interface BudgetProfile {

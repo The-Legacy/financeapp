@@ -1,18 +1,19 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
-import { formatCurrency, formatDate, today } from '../../lib/formatters'
+import { formatCurrency, formatDate, today, toLabel } from '../../lib/formatters'
 import { useConfirm } from '../../components/ConfirmDialog'
 import type { Transaction, Category, Account } from '../../types'
 
-const TX_TYPES = ['income','expense','transfer','loan_payment','charge_payment','refund','adjustment','investment_buy','investment_sell']
+const TX_TYPES = ['income','expense','cc_payment','transfer','loan_payment','charge_payment','refund','adjustment','investment_buy','investment_sell']
 
 function TypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {
     income: 'badge-green', expense: 'badge-red', refund: 'badge-green',
     transfer: 'badge-blue', loan_payment: 'badge-yellow', charge_payment: 'badge-yellow',
+    cc_payment: 'badge-blue',
     investment_buy: 'badge-blue', investment_sell: 'badge-green', adjustment: 'badge-gray',
   }
-  return <span className={map[type] ?? 'badge-gray'}>{type.replace('_', ' ')}</span>
+  return <span className={map[type] ?? 'badge-gray'}>{toLabel(type)}</span>
 }
 
 interface TxFormProps {
@@ -55,7 +56,7 @@ function TxForm({ initial, categories, accounts, onSave, onClose }: TxFormProps)
             <div>
               <label className="label">Type</label>
               <select className="input" value={form.type ?? 'expense'} onChange={e => set('type', e.target.value as any)}>
-                {TX_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                {TX_TYPES.map(t => <option key={t} value={t}>{toLabel(t)}</option>)}
               </select>
             </div>
           </div>
@@ -66,7 +67,7 @@ function TxForm({ initial, categories, accounts, onSave, onClose }: TxFormProps)
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Amount</label>
-              <input type="number" step="0.01" min="0" className="input" value={form.amount ?? ''} onChange={e => set('amount', parseFloat(e.target.value))} required />
+              <input type="number" step="0.01" min="0" className="input" value={form.amount ?? ''} onChange={e => set('amount', e.target.value === '' ? 0 : parseFloat(e.target.value))} required />
             </div>
             <div>
               <label className="label">Category</label>
@@ -110,7 +111,7 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Transaction | undefined>()
-  const [filters, setFilters] = useState({ search: '', type: '', startDate: '', endDate: '' })
+  const [filters, setFilters] = useState({ search: '', type: '', accountId: '', startDate: '', endDate: '' })
   const { confirm, dialog: confirmDialog } = useConfirm()
 
   const load = useCallback(async () => {
@@ -118,6 +119,7 @@ export default function Transactions() {
     const f: any = {}
     if (filters.search) f.search = filters.search
     if (filters.type) f.type = filters.type
+    if (filters.accountId) f.account_id = Number(filters.accountId)
     if (filters.startDate) f.startDate = filters.startDate
     if (filters.endDate) f.endDate = filters.endDate
     const [txs, cats, accts] = await Promise.all([
@@ -183,12 +185,16 @@ export default function Transactions() {
           <option value="">All types</option>
           {TX_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
         </select>
+        <select className="input w-40" value={filters.accountId} onChange={e => setFilters(f => ({ ...f, accountId: e.target.value }))}>
+          <option value="">All accounts</option>
+          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
         <input type="date" className="input w-40" value={filters.startDate}
           onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} />
         <span className="t-muted text-sm">to</span>
         <input type="date" className="input w-40" value={filters.endDate}
           onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} />
-        <button className="btn-secondary text-xs" onClick={() => setFilters({ search: '', type: '', startDate: '', endDate: '' })}>
+        <button className="btn-secondary text-xs" onClick={() => setFilters({ search: '', type: '', accountId: '', startDate: '', endDate: '' })}>
           Clear
         </button>
       </div>
@@ -221,7 +227,7 @@ export default function Transactions() {
                 <td className="px-4 py-3"><TypeBadge type={tx.type} /></td>
                 <td className="px-4 py-3 t-muted">{tx.category_name ?? '—'}</td>
                 <td className="px-4 py-3 t-muted">{tx.account_name ?? '—'}</td>
-                <td className={`px-4 py-3 text-right font-mono font-medium ${['income','refund'].includes(tx.type) ? 'pos' : ['expense','charge_payment','loan_payment'].includes(tx.type) ? 'neg' : 'neutral'}`}>
+                <td className={`px-4 py-3 text-right font-mono font-medium ${['income','refund','cc_payment'].includes(tx.type) ? 'pos' : ['expense','charge_payment','loan_payment'].includes(tx.type) ? 'neg' : 'neutral'}`}>
                   {formatCurrency(tx.amount)}
                 </td>
                 <td className="px-4 py-3">

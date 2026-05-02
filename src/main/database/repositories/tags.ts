@@ -16,9 +16,14 @@ export function createTag(tag: Omit<Tag, 'id'>): Tag {
   return db.prepare('SELECT * FROM tags WHERE id = ?').get(result.lastInsertRowid) as Tag
 }
 
+const ALLOWED_TAG_UPDATE_FIELDS = new Set(['name', 'color'])
+
 export function updateTag(id: number, tag: Partial<Tag>): Tag {
   const db = getDb()
-  const fields = Object.keys(tag).filter(k => k !== 'id').map(k => `${k} = @${k}`).join(', ')
+  const fields = Object.keys(tag)
+    .filter(k => ALLOWED_TAG_UPDATE_FIELDS.has(k))
+    .map(k => `${k} = @${k}`).join(', ')
+  if (!fields) throw new Error('No valid fields to update')
   db.prepare(`UPDATE tags SET ${fields} WHERE id = @id`).run({ ...tag, id })
   return db.prepare('SELECT * FROM tags WHERE id = ?').get(id) as Tag
 }

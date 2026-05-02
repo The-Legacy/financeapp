@@ -8,6 +8,12 @@ export interface Account {
   institution?: string
   notes?: string
   active?: number
+  // Credit card specific
+  credit_limit?: number | null
+  apr?: number | null
+  minimum_payment?: number | null
+  due_day?: number | null
+  statement_close_day?: number | null
   // Calculated
   current_balance?: number
 }
@@ -19,7 +25,7 @@ export function getAccounts(): Account[] {
     SELECT a.*,
       a.starting_balance + COALESCE((
         SELECT SUM(CASE
-          WHEN t.type IN ('income','refund') THEN t.amount
+          WHEN t.type IN ('income','refund','cc_payment') THEN t.amount
           WHEN t.type IN ('expense','charge_payment','loan_payment') THEN -t.amount
           WHEN t.type = 'investment_buy' THEN -t.amount
           WHEN t.type = 'investment_sell' THEN t.amount
@@ -36,19 +42,37 @@ export function getAccounts(): Account[] {
 
 export function createAccount(acc: Omit<Account, 'id' | 'current_balance'>): Account {
   const db = getDb()
+  const params = {
+    name: acc.name,
+    type: acc.type,
+    starting_balance: acc.starting_balance,
+    institution: acc.institution ?? null,
+    notes: acc.notes ?? null,
+    credit_limit: acc.credit_limit ?? null,
+    apr: acc.apr ?? null,
+    minimum_payment: acc.minimum_payment ?? null,
+    due_day: acc.due_day ?? null,
+    statement_close_day: acc.statement_close_day ?? null,
+  }
   const result = db.prepare(`
-    INSERT INTO accounts (name, type, starting_balance, institution, notes)
-    VALUES (@name, @type, @starting_balance, @institution, @notes)
-  `).run(acc)
+    INSERT INTO accounts (name, type, starting_balance, institution, notes, credit_limit, apr, minimum_payment, due_day, statement_close_day)
+    VALUES (@name, @type, @starting_balance, @institution, @notes, @credit_limit, @apr, @minimum_payment, @due_day, @statement_close_day)
+  `).run(params)
   return db.prepare('SELECT * FROM accounts WHERE id = ?').get(result.lastInsertRowid) as Account
 }
+
+const ALLOWED_ACCOUNT_UPDATE_FIELDS = new Set([
+  'name', 'type', 'starting_balance', 'institution', 'notes', 'active',
+  'credit_limit', 'apr', 'minimum_payment', 'due_day', 'statement_close_day',
+])
 
 export function updateAccount(id: number, acc: Partial<Account>): Account {
   const db = getDb()
   const fields = Object.keys(acc)
-    .filter(k => !['id', 'current_balance'].includes(k))
+    .filter(k => ALLOWED_ACCOUNT_UPDATE_FIELDS.has(k))
     .map(k => `${k} = @${k}`)
     .join(', ')
+  if (!fields) throw new Error('No valid fields to update')
   db.prepare(`UPDATE accounts SET ${fields} WHERE id = @id`).run({ ...acc, id })
   return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as Account
 }

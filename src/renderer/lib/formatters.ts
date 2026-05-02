@@ -44,3 +44,8 @@ export function daysUntil(dateStr: string): number {
 export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(' ')
 }
+
+/** Convert snake_case or lowercase string to Title Case for display. */
+export function toLabel(s: string): string {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}

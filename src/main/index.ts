@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { initializeDatabase } from './database/db'
 import { registerAllHandlers } from './ipc/handlers'
@@ -15,6 +15,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -35,6 +36,18 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Content Security Policy (production only — dev mode uses Vite's own CSP handling)
+  if (!process.env.ELECTRON_RENDERER_URL) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:"],
+        },
+      })
+    })
+  }
+
   registerAllHandlers(ipcMain)
   createWindow()
 

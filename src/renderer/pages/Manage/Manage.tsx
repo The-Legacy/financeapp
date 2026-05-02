@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
+import { toLabel } from '../../lib/formatters'
 import { useConfirm } from '../../components/ConfirmDialog'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ function CategoryModal({ initial, onSave, onClose }: {
             <div>
               <label className="label">Type</label>
               <select className="input" value={form.type ?? 'expense'} onChange={e => set('type', e.target.value)}>
-                {CAT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {CAT_TYPES.map(t => <option key={t} value={t}>{toLabel(t)}</option>)}
               </select>
             </div>
           </div>
@@ -192,8 +193,8 @@ function CategoriesSection() {
         <div className="flex items-center gap-3">
           <h2 className="font-semibold t-text">Categories</h2>
           <select className="input text-xs py-1 px-2 w-auto" value={filter} onChange={e => setFilter(e.target.value)}>
-            <option value="all">All types</option>
-            {CAT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            <option value="all">All Types</option>
+            {CAT_TYPES.map(t => <option key={t} value={t}>{toLabel(t)}</option>)}
           </select>
         </div>
         <button className="btn-primary text-xs" onClick={() => setModal('new')}>+ Add Category</button>
