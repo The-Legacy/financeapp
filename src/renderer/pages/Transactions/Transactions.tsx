@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
 import { formatCurrency, formatDate, today } from '../../lib/formatters'
+import { useConfirm } from '../../components/ConfirmDialog'
 import type { Transaction, Category, Account } from '../../types'
 
 const TX_TYPES = ['income','expense','transfer','loan_payment','charge_payment','refund','adjustment','investment_buy','investment_sell']
@@ -110,6 +111,7 @@ export default function Transactions() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Transaction | undefined>()
   const [filters, setFilters] = useState({ search: '', type: '', startDate: '', endDate: '' })
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -141,7 +143,7 @@ export default function Transactions() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this transaction?')) return
+    if (!await confirm('Delete this transaction?', { danger: true, confirmLabel: 'Delete' })) return
     await invoke('transactions:delete', id)
     await load()
   }
@@ -160,15 +162,15 @@ export default function Transactions() {
       {/* Summary bar */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Income</div>
+          <div className="text-xs t-muted mb-1">Income</div>
           <div className="text-lg font-semibold pos">{formatCurrency(totalIncome)}</div>
         </div>
         <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Expenses</div>
+          <div className="text-xs t-muted mb-1">Expenses</div>
           <div className="text-lg font-semibold neg">{formatCurrency(totalExpenses)}</div>
         </div>
         <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Net</div>
+          <div className="text-xs t-muted mb-1">Net</div>
           <div className={`text-lg font-semibold ${net >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(net)}</div>
         </div>
       </div>
@@ -183,7 +185,7 @@ export default function Transactions() {
         </select>
         <input type="date" className="input w-40" value={filters.startDate}
           onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} />
-        <span className="text-gray-500 text-sm">to</span>
+        <span className="t-muted text-sm">to</span>
         <input type="date" className="input w-40" value={filters.endDate}
           onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} />
         <button className="btn-secondary text-xs" onClick={() => setFilters({ search: '', type: '', startDate: '', endDate: '' })}>
@@ -195,30 +197,30 @@ export default function Transactions() {
       <div className="card p-0 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-800 text-left">
-              <th className="px-4 py-3 text-gray-400 font-medium">Date</th>
-              <th className="px-4 py-3 text-gray-400 font-medium">Description</th>
-              <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
-              <th className="px-4 py-3 text-gray-400 font-medium">Category</th>
-              <th className="px-4 py-3 text-gray-400 font-medium">Account</th>
-              <th className="px-4 py-3 text-gray-400 font-medium text-right">Amount</th>
+            <tr className="border-b t-divider text-left">
+              <th className="px-4 py-3 t-muted font-medium">Date</th>
+              <th className="px-4 py-3 t-muted font-medium">Description</th>
+              <th className="px-4 py-3 t-muted font-medium">Type</th>
+              <th className="px-4 py-3 t-muted font-medium">Category</th>
+              <th className="px-4 py-3 t-muted font-medium">Account</th>
+              <th className="px-4 py-3 t-muted font-medium text-right">Amount</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center t-muted">Loading…</td></tr>
             )}
             {!loading && transactions.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No transactions found.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center t-muted">No transactions found.</td></tr>
             )}
             {transactions.map(tx => (
-              <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{formatDate(tx.date)}</td>
-                <td className="px-4 py-3 text-gray-100 max-w-xs truncate">{tx.description}</td>
+              <tr key={tx.id} className="border-b t-divider t-row transition-colors">
+                <td className="px-4 py-3 t-muted whitespace-nowrap">{formatDate(tx.date)}</td>
+                <td className="px-4 py-3 t-text max-w-xs truncate">{tx.description}</td>
                 <td className="px-4 py-3"><TypeBadge type={tx.type} /></td>
-                <td className="px-4 py-3 text-gray-400">{tx.category_name ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-400">{tx.account_name ?? '—'}</td>
+                <td className="px-4 py-3 t-muted">{tx.category_name ?? '—'}</td>
+                <td className="px-4 py-3 t-muted">{tx.account_name ?? '—'}</td>
                 <td className={`px-4 py-3 text-right font-mono font-medium ${['income','refund'].includes(tx.type) ? 'pos' : ['expense','charge_payment','loan_payment'].includes(tx.type) ? 'neg' : 'neutral'}`}>
                   {formatCurrency(tx.amount)}
                 </td>
@@ -243,6 +245,7 @@ export default function Transactions() {
           onClose={() => { setShowForm(false); setEditing(undefined) }}
         />
       )}
+      {confirmDialog}
     </div>
   )
 }

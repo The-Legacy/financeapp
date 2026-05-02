@@ -1,4 +1,6 @@
 import type { IpcMain } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
+import { readFileSync, writeFileSync } from 'fs'
 import {
   getTransactions, createTransaction, updateTransaction, deleteTransaction,
   getTransactionSummary, getSpendingByCategory
@@ -20,7 +22,7 @@ import { getDb } from '../database/db'
 function handle(ipcMain: IpcMain, channel: string, fn: (...args: any[]) => any) {
   ipcMain.handle(channel, async (_event, ...args) => {
     try {
-      return { ok: true, data: fn(...args) }
+      return { ok: true, data: await fn(...args) }
     } catch (err: any) {
       console.error(`IPC error [${channel}]:`, err)
       return { ok: false, error: err?.message ?? 'Unknown error' }
@@ -115,6 +117,56 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   // Seed demo data
   handle(ipcMain, 'dev:seed', () => seedDemoData())
+
+  // CSV Import — registered directly to access event.sender for reliable window ref
+  ipcMain.handle('data:import:csv', async (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+        title: 'Import CSV',
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+        properties: ['openFile'],
+      })
+      if (canceled || !filePaths[0]) return { ok: true, data: null }
+      return { ok: true, data: readFileSync(filePaths[0], 'utf-8') }
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? 'Import failed' }
+    }
+  })
+
+  // CSV Export
+  ipcMain.handle('data:export:csv', async (event, csv: string, defaultName: string) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      const { canceled, filePath } = await dialog.showSaveDialog(win!, {
+        title: 'Export CSV',
+        defaultPath: defaultName ?? 'export.csv',
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      })
+      if (canceled || !filePath) return { ok: true, data: false }
+      writeFileSync(filePath, csv, 'utf-8')
+      return { ok: true, data: true }
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? 'Export failed' }
+    }
+  })
+
+  // PDF Export
+  ipcMain.handle('data:export:pdf', async (event, base64: string, defaultName: string) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      const { canceled, filePath } = await dialog.showSaveDialog(win!, {
+        title: 'Export PDF',
+        defaultPath: defaultName ?? 'export.pdf',
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      })
+      if (canceled || !filePath) return { ok: true, data: false }
+      writeFileSync(filePath, Buffer.from(base64, 'base64'))
+      return { ok: true, data: true }
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? 'Export failed' }
+    }
+  })
 }
 
 function seedDemoData(): void {

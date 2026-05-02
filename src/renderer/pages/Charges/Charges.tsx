@@ -119,23 +119,23 @@ export default function Charges() {
       </div>
 
       <div className="space-y-3">
-        {upcoming.length === 0 && <div className="card text-sm text-gray-500">No upcoming charges.</div>}
+        {upcoming.length === 0 && <div className="card text-sm t-muted">No upcoming charges.</div>}
         {upcoming.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()).map(c => {
           const days = daysUntil(c.due_date)
           return (
             <div key={c.id} className="card flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-100">{c.name}</span>
+                  <span className="font-medium t-text">{c.name}</span>
                   <StatusBadge status={c.status} />
                 </div>
-                {c.description && <div className="text-xs text-gray-400 mt-0.5">{c.description}</div>}
+                {c.description && <div className="text-xs t-muted mt-0.5">{c.description}</div>}
                 <div className="flex items-center gap-3 mt-1.5 text-xs">
-                  <span className="text-gray-400">Due: {formatDate(c.due_date)}</span>
+                  <span className="t-muted">Due: {formatDate(c.due_date)}</span>
                   <span className={days <= 14 ? 'text-red-400 font-medium' : days <= 30 ? 'text-yellow-400' : 'text-gray-500'}>
                     {days === 0 ? 'Today' : days < 0 ? `${Math.abs(days)}d overdue` : `${days} days left`}
                   </span>
-                  {c.category_name && <span className="text-gray-500">{c.category_name}</span>}
+                  {c.category_name && <span className="t-muted">{c.category_name}</span>}
                 </div>
               </div>
               <div className="text-right shrink-0">
@@ -149,13 +149,13 @@ export default function Charges() {
 
       {past.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Completed / Canceled</h2>
+          <h2 className="t-sec mb-3">Completed / Canceled</h2>
           <div className="space-y-2">
             {past.map(c => (
               <div key={c.id} className="card flex justify-between items-center opacity-60">
-                <span className="text-sm text-gray-300">{c.name}</span>
+                <span className="text-sm t-text">{c.name}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-400">{formatCurrency(c.expected_amount)}</span>
+                  <span className="text-sm t-muted">{formatCurrency(c.expected_amount)}</span>
                   <StatusBadge status={c.status} />
                 </div>
               </div>

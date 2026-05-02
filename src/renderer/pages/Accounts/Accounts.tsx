@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
 import { formatCurrency } from '../../lib/formatters'
+import { useConfirm } from '../../components/ConfirmDialog'
 import type { Account } from '../../types'
 
 const ACCOUNT_TYPES = ['checking','savings','cash','credit_card','loan','brokerage','other']
@@ -62,16 +63,17 @@ function AccountForm({ initial, onSave, onClose }: {
 
 function typeColor(type: string): string {
   const map: Record<string, string> = {
-    checking: 'text-blue-400', savings: 'text-green-400', cash: 'text-yellow-400',
-    credit_card: 'text-red-400', loan: 'text-orange-400', brokerage: 'text-purple-400', other: 'text-gray-400'
+    checking: 'c-blue', savings: 'c-green', cash: 'c-yellow',
+    credit_card: 'c-red', loan: 'c-orange', brokerage: 'c-purple', other: 't-muted'
   }
-  return map[type] ?? 'text-gray-400'
+  return map[type] ?? 't-muted'
 }
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Account | undefined>()
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const load = useCallback(async () => {
     setAccounts(await invoke<Account[]>('accounts:list'))
@@ -86,7 +88,7 @@ export default function Accounts() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Remove this account?')) return
+    if (!await confirm('Remove this account?', { danger: true, confirmLabel: 'Remove' })) return
     await invoke('accounts:delete', id)
     await load()
   }
@@ -103,32 +105,32 @@ export default function Accounts() {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Total Assets</div>
-          <div className="text-2xl font-bold text-green-400">{formatCurrency(totalBalance)}</div>
+          <div className="text-xs t-muted mb-1">Total Assets</div>
+          <div className="text-2xl font-bold c-green">{formatCurrency(totalBalance)}</div>
         </div>
         <div className="card text-center">
-          <div className="text-xs text-gray-400 mb-1">Total Debt</div>
-          <div className="text-2xl font-bold text-red-400">{formatCurrency(totalDebt)}</div>
+          <div className="text-xs t-muted mb-1">Total Debt</div>
+          <div className="text-2xl font-bold c-red">{formatCurrency(totalDebt)}</div>
         </div>
       </div>
 
       <div className="space-y-3">
-        {accounts.length === 0 && <div className="card text-sm text-gray-500">No accounts yet.</div>}
+        {accounts.length === 0 && <div className="card text-sm t-muted">No accounts yet.</div>}
         {accounts.map(a => (
           <div key={a.id} className="card flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-medium text-gray-100">{a.name}</span>
+                <span className="font-medium t-text">{a.name}</span>
                 <span className={`text-xs font-medium ${typeColor(a.type)}`}>{a.type.replace('_', ' ')}</span>
               </div>
-              {a.institution && <div className="text-xs text-gray-500 mt-0.5">{a.institution}</div>}
+              {a.institution && <div className="text-xs t-muted mt-0.5">{a.institution}</div>}
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <div className={`text-lg font-bold ${(a.current_balance ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <div className={`text-lg font-bold ${(a.current_balance ?? 0) >= 0 ? 'c-green' : 'c-red'}`}>
                   {formatCurrency(a.current_balance ?? 0)}
                 </div>
-                <div className="text-xs text-gray-500">Starting: {formatCurrency(a.starting_balance)}</div>
+                <div className="text-xs t-muted">Starting: {formatCurrency(a.starting_balance)}</div>
               </div>
               <div className="flex gap-2">
                 <button className="btn-secondary text-xs" onClick={() => { setEditing(a); setShowForm(true) }}>Edit</button>
@@ -142,6 +144,7 @@ export default function Accounts() {
       {showForm && (
         <AccountForm initial={editing} onSave={handleSave} onClose={() => { setShowForm(false); setEditing(undefined) }} />
       )}
+      {confirmDialog}
     </div>
   )
 }

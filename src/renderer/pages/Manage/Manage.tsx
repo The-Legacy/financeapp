@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
+import { useConfirm } from '../../components/ConfirmDialog'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ function CategoriesSection() {
   const [cats, setCats] = useState<Category[]>([])
   const [modal, setModal] = useState<'new' | Category | null>(null)
   const [filter, setFilter] = useState('all')
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const load = useCallback(async () => {
     setCats(await invoke<Category[]>('categories:list'))
@@ -170,7 +172,7 @@ function CategoriesSection() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Remove this category? Existing transactions will keep their category assignment.')) return
+    if (!await confirm('Remove this category? Existing transactions will keep their category assignment.', { danger: true, confirmLabel: 'Remove' })) return
     await invoke('categories:delete', id)
     await load()
   }
@@ -188,7 +190,7 @@ function CategoriesSection() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="font-semibold text-gray-200">Categories</h2>
+          <h2 className="font-semibold t-text">Categories</h2>
           <select className="input text-xs py-1 px-2 w-auto" value={filter} onChange={e => setFilter(e.target.value)}>
             <option value="all">All types</option>
             {CAT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -198,12 +200,12 @@ function CategoriesSection() {
       </div>
 
       {Object.entries(byType).length === 0 && (
-        <div className="card text-sm text-gray-500">No categories found.</div>
+        <div className="card text-sm t-muted">No categories found.</div>
       )}
 
       {Object.entries(byType).map(([type, items]) => (
         <div key={type}>
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{type}</div>
+          <div className="t-sec mb-2">{type}</div>
           <div className="grid grid-cols-1 gap-2">
             {items.map(cat => (
               <div key={cat.id} className="card flex items-center justify-between py-2.5">
@@ -214,7 +216,7 @@ function CategoriesSection() {
                   >
                     {cat.icon || cat.name[0]?.toUpperCase()}
                   </div>
-                  <span className="text-sm text-gray-100">{cat.name}</span>
+                  <span className="text-sm t-text">{cat.name}</span>
                 </div>
                 <div className="flex gap-2">
                   <button className="btn-secondary text-xs" onClick={() => setModal(cat)}>Edit</button>
@@ -233,6 +235,7 @@ function CategoriesSection() {
           onClose={() => setModal(null)}
         />
       )}
+      {confirmDialog}
     </div>
   )
 }
@@ -242,6 +245,7 @@ function CategoriesSection() {
 function TagsSection() {
   const [tags, setTags] = useState<Tag[]>([])
   const [modal, setModal] = useState<'new' | Tag | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const load = useCallback(async () => {
     setTags(await invoke<Tag[]>('tags:list'))
@@ -259,7 +263,7 @@ function TagsSection() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this tag? It will be removed from all transactions.')) return
+    if (!await confirm('Delete this tag? It will be removed from all transactions.', { danger: true, confirmLabel: 'Delete' })) return
     await invoke('tags:delete', id)
     await load()
   }
@@ -267,12 +271,12 @@ function TagsSection() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-gray-200">Tags</h2>
+          <h2 className="font-semibold t-text">Tags</h2>
         <button className="btn-primary text-xs" onClick={() => setModal('new')}>+ Add Tag</button>
       </div>
 
       {tags.length === 0 && (
-        <div className="card text-sm text-gray-500">No tags yet. Tags can be applied to transactions for flexible filtering.</div>
+        <div className="card text-sm t-muted">No tags yet. Tags can be applied to transactions for flexible filtering.</div>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -284,12 +288,12 @@ function TagsSection() {
           >
             <span style={{ color: tag.color ?? '#6366f1' }}>{tag.name}</span>
             <button
-              className="text-gray-500 hover:text-gray-200 text-xs ml-1"
+              className="t-muted hover:t-text text-xs ml-1"
               onClick={() => setModal(tag)}
               title="Edit"
             >✎</button>
             <button
-              className="text-gray-500 hover:text-red-400 text-xs"
+              className="t-muted hover:text-red-500 text-xs"
               onClick={() => handleDelete(tag.id!)}
               title="Delete"
             >✕</button>
@@ -304,6 +308,7 @@ function TagsSection() {
           onClose={() => setModal(null)}
         />
       )}
+      {confirmDialog}
     </div>
   )
 }
@@ -319,13 +324,13 @@ export default function Manage() {
     <div className="p-6 space-y-5">
       <h1 className="text-xl font-bold">Manage</h1>
 
-      <div className="flex gap-1 bg-gray-900 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 t-surf rounded-lg p-1 w-fit">
         {(['categories', 'tags'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
-              tab === t ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              tab === t ? 'bg-[var(--primary)] text-[var(--primary-fg)]' : 't-muted hover:t-text'
             }`}
           >
             {t}

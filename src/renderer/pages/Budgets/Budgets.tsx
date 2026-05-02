@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
 import { formatCurrency, formatMonth, currentMonth, monthStart, monthEnd } from '../../lib/formatters'
+import { useConfirm } from '../../components/ConfirmDialog'
 import type { BudgetProfile, BudgetItem, Category, MonthBudgetAssignment, EffectiveBudgetItem, Transaction } from '../../types'
 
 // ---- Budget Profile Form ----
@@ -86,7 +87,7 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
         </div>
         <div className="overflow-y-auto flex-1 space-y-2">
           {items.map(item => (
-            <div key={item.id} className="flex items-center gap-3 p-2 bg-gray-800 rounded-lg">
+            <div key={item.id} className="flex items-center gap-3 p-2 t-surf rounded-lg">
               <div className="flex-1 text-sm">{item.category_name}</div>
               <input
                 type="number" step="0.01" min="0"
@@ -100,7 +101,7 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
             </div>
           ))}
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-800 flex gap-2 items-end">
+        <div className="mt-4 pt-4 border-t t-divider flex gap-2 items-end">
           <div className="flex-1">
             <label className="label">Add Category</label>
             <select className="input" value={adding.category_id} onChange={e => setAdding(a => ({ ...a, category_id: Number(e.target.value) }))}>
@@ -134,6 +135,7 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
   const [summary, setSummary] = useState<{ income: number; expenses: number; net: number } | null>(null)
   const [assigning, setAssigning] = useState(false)
   const [selectedProfile, setSelectedProfile] = useState<number>(0)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const load = useCallback(async () => {
     const [asgn, eff, catSpend, summ] = await Promise.all([
@@ -159,7 +161,7 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
   }
 
   async function finalizeMonth() {
-    if (!confirm(`Finalize ${formatMonth(month)}? This will freeze the budget snapshot and cannot be undone.`)) return
+    if (!await confirm(`Finalize ${formatMonth(month)}? This will freeze the budget snapshot and cannot be undone.`, { confirmLabel: 'Finalize' })) return
     await invoke('budgets:month:finalize', month)
     await load()
   }
@@ -174,14 +176,14 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
     <div className="card space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold text-gray-100">{formatMonth(month)}</div>
+          <div className="text-sm font-semibold t-text">{formatMonth(month)}</div>
           {assignment ? (
-            <div className="text-xs text-gray-400 mt-0.5">
-              Profile: <span className="text-indigo-400">{assignment.profile_name}</span>
+            <div className="text-xs t-muted mt-0.5">
+              Profile: <span className="t-prim">{assignment.profile_name}</span>
               {assignment.finalized === 1 && <span className="badge-blue ml-2">Frozen</span>}
             </div>
           ) : (
-            <div className="text-xs text-gray-500">No budget assigned</div>
+            <div className="text-xs t-muted">No budget assigned</div>
           )}
         </div>
         <div className="flex gap-2">
@@ -195,7 +197,7 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
       </div>
 
       {assigning && (
-        <div className="flex gap-2 items-center p-3 bg-gray-800 rounded-lg">
+        <div className="flex gap-2 items-center p-3 t-surf rounded-lg">
           <select className="input flex-1" value={selectedProfile} onChange={e => setSelectedProfile(Number(e.target.value))}>
             <option value={0}>— Select profile —</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -207,16 +209,16 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
 
       {summary && (
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-gray-800 rounded-lg p-3 text-center">
-            <div className="text-xs text-gray-400">Income</div>
+          <div className="t-surf rounded-lg p-3 text-center">
+            <div className="text-xs t-muted">Income</div>
             <div className="text-sm font-semibold pos">{formatCurrency(summary.income)}</div>
           </div>
-          <div className="bg-gray-800 rounded-lg p-3 text-center">
-            <div className="text-xs text-gray-400">Spent</div>
+          <div className="t-surf rounded-lg p-3 text-center">
+            <div className="text-xs t-muted">Spent</div>
             <div className="text-sm font-semibold neg">{formatCurrency(summary.expenses)}</div>
           </div>
-          <div className="bg-gray-800 rounded-lg p-3 text-center">
-            <div className="text-xs text-gray-400">Net</div>
+          <div className="t-surf rounded-lg p-3 text-center">
+            <div className="text-xs t-muted">Net</div>
             <div className={`text-sm font-semibold ${summary.net >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(summary.net)}</div>
           </div>
         </div>
@@ -224,7 +226,7 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
 
       {budgetItems.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-400">
+          <div className="flex items-center justify-between text-xs t-muted">
             <span>Budget vs Actual</span>
             <span>{formatCurrency(totalBudgeted)} budgeted · {formatCurrency(totalSpent)} spent</span>
           </div>
@@ -235,14 +237,14 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
             return (
               <div key={item.category_id}>
                 <div className="flex justify-between text-xs mb-0.5">
-                  <span className={over ? 'text-red-400 font-medium' : 'text-gray-300'}>{item.category_name}</span>
-                  <span className={over ? 'neg' : 'text-gray-400'}>
+                  <span className={over ? 'text-red-500 font-medium' : 't-text'}>{item.category_name}</span>
+                  <span className={over ? 'neg' : 't-muted'}>
                     {formatCurrency(spent)} / {formatCurrency(item.monthly_limit)}
                   </span>
                 </div>
-                <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-1.5 t-surf rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${over ? 'bg-red-500' : pct > 80 ? 'bg-yellow-500' : 'bg-indigo-500'}`}
+                    className={`h-full rounded-full transition-all ${over ? 'bg-red-500' : pct > 80 ? 'bg-amber-500' : 'bg-[var(--primary)]'}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -250,12 +252,13 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
             )
           })}
           {overBudget.length > 0 && (
-            <div className="text-xs text-red-400 pt-1">
+            <div className="text-xs text-red-500 pt-1">
               ⚠ Over budget: {overBudget.map(i => i.category_name).join(', ')}
             </div>
           )}
         </div>
       )}
+      {confirmDialog}
     </div>
   )
 }
@@ -266,6 +269,7 @@ export default function Budgets() {
   const [showProfileForm, setShowProfileForm] = useState(false)
   const [editingProfile, setEditingProfile] = useState<BudgetProfile | undefined>()
   const [editingItems, setEditingItems] = useState<BudgetProfile | undefined>()
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const months = [0, 1, 2].map(offset => {
     const d = new Date()
@@ -291,7 +295,7 @@ export default function Budgets() {
   }
 
   async function handleDeleteProfile(id: number) {
-    if (!confirm('Delete this budget profile?')) return
+    if (!await confirm('Delete this budget profile?', { danger: true, confirmLabel: 'Delete' })) return
     await invoke('budgets:profiles:delete', id)
     await load()
   }
@@ -305,14 +309,14 @@ export default function Budgets() {
 
       {/* Budget Profiles */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Budget Profiles</h2>
+        <h2 className="t-sec mb-3">Budget Profiles</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {profiles.map(p => (
             <div key={p.id} className="card flex items-center justify-between">
               <div>
-                <div className="font-medium text-gray-100">{p.name}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{p.season_type !== 'none' ? p.season_type : 'Custom'}</div>
-                {p.description && <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>}
+                <div className="font-medium t-text">{p.name}</div>
+                <div className="text-xs t-muted mt-0.5">{p.season_type !== 'none' ? p.season_type : 'Custom'}</div>
+                {p.description && <div className="text-xs t-muted mt-0.5">{p.description}</div>}
               </div>
               <div className="flex gap-2">
                 <button className="btn-secondary text-xs" onClick={() => setEditingItems(p)}>Edit Items</button>
@@ -322,14 +326,14 @@ export default function Budgets() {
             </div>
           ))}
           {profiles.length === 0 && (
-            <div className="card text-sm text-gray-500">No budget profiles yet. Create one to get started.</div>
+            <div className="card text-sm t-muted">No budget profiles yet. Create one to get started.</div>
           )}
         </div>
       </div>
 
       {/* Monthly Summaries */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Monthly Budget Summaries</h2>
+        <h2 className="t-sec mb-3">Monthly Budget Summaries</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           {months.map(m => <MonthSummary key={m} month={m} profiles={profiles} />)}
         </div>
@@ -350,6 +354,7 @@ export default function Budgets() {
           onClose={() => setEditingItems(undefined)}
         />
       )}
+      {confirmDialog}
     </div>
   )
 }

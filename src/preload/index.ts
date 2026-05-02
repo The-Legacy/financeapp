@@ -14,6 +14,7 @@ const CHANNELS = [
   'charges:list', 'charges:create', 'charges:update', 'charges:paid',
   'settings:get', 'settings:set', 'settings:all',
   'tags:list', 'tags:create', 'tags:update', 'tags:delete',
+  'data:import:csv', 'data:export:csv', 'data:export:pdf',
   'dev:seed',
 ]
 
