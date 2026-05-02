@@ -1,18 +1,24 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { initializeDatabase } from './database/db'
+import { registerAllHandlers } from './ipc/handlers'
 
 let mainWindow: BrowserWindow | null
 
 function createWindow(): void {
+  initializeDatabase()
+
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1280,
+    height: 800,
+    minWidth: 900,
+    minHeight: 600,
     show: false,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      enableRemoteModule: false,
-      sandbox: true
+      sandbox: false
     }
   })
 
@@ -20,15 +26,16 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
-  const isDev = process.env.ELECTRON_VITE_DEV === '1'
-  const url = isDev
-    ? `http://localhost:5173`
-    : `file://${join(__dirname, '../renderer/index.html')}`
-
-  mainWindow.loadURL(url)
+  if (process.env.ELECTRON_RENDERER_URL) {
+    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
 }
 
 app.whenReady().then(() => {
+  registerAllHandlers(ipcMain)
   createWindow()
 
   app.on('activate', () => {
@@ -40,9 +47,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
-})
-
-// Example IPC handler
-ipcMain.handle('get-data', async () => {
-  return { message: 'Data from main process' }
 })

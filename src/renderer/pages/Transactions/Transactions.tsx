@@ -1,0 +1,248 @@
+import React, { useEffect, useState, useCallback } from 'react'
+import { invoke } from '../../lib/api'
+import { formatCurrency, formatDate, today } from '../../lib/formatters'
+import type { Transaction, Category, Account } from '../../types'
+
+const TX_TYPES = ['income','expense','transfer','loan_payment','charge_payment','refund','adjustment','investment_buy','investment_sell']
+
+function TypeBadge({ type }: { type: string }) {
+  const map: Record<string, string> = {
+    income: 'badge-green', expense: 'badge-red', refund: 'badge-green',
+    transfer: 'badge-blue', loan_payment: 'badge-yellow', charge_payment: 'badge-yellow',
+    investment_buy: 'badge-blue', investment_sell: 'badge-green', adjustment: 'badge-gray',
+  }
+  return <span className={map[type] ?? 'badge-gray'}>{type.replace('_', ' ')}</span>
+}
+
+interface TxFormProps {
+  initial?: Partial<Transaction>
+  categories: Category[]
+  accounts: Account[]
+  onSave: (tx: Partial<Transaction>) => Promise<void>
+  onClose: () => void
+}
+
+function TxForm({ initial, categories, accounts, onSave, onClose }: TxFormProps) {
+  const [form, setForm] = useState<Partial<Transaction>>({
+    date: today(), type: 'expense', amount: 0, description: '', ...initial
+  })
+  const [saving, setSaving] = useState(false)
+
+  const set = (key: keyof Transaction, val: any) => setForm(f => ({ ...f, [key]: val }))
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await onSave(form)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="card w-full max-w-lg">
+        <h2 className="text-lg font-semibold mb-5">{initial?.id ? 'Edit' : 'New'} Transaction</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Date</label>
+              <input type="date" className="input" value={form.date ?? ''} onChange={e => set('date', e.target.value)} required />
+            </div>
+            <div>
+              <label className="label">Type</label>
+              <select className="input" value={form.type ?? 'expense'} onChange={e => set('type', e.target.value as any)}>
+                {TX_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <input type="text" className="input" value={form.description ?? ''} onChange={e => set('description', e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Amount</label>
+              <input type="number" step="0.01" min="0" className="input" value={form.amount ?? ''} onChange={e => set('amount', parseFloat(e.target.value))} required />
+            </div>
+            <div>
+              <label className="label">Category</label>
+              <select className="input" value={form.category_id ?? ''} onChange={e => set('category_id', e.target.value ? Number(e.target.value) : null)}>
+                <option value="">— None —</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Account</label>
+              <select className="input" value={form.account_id ?? ''} onChange={e => set('account_id', e.target.value ? Number(e.target.value) : null)}>
+                <option value="">— None —</option>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Payment Method</label>
+              <input type="text" className="input" placeholder="Card, Cash…" value={form.payment_method ?? ''} onChange={e => set('payment_method', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="label">Notes</label>
+            <textarea className="input" rows={2} value={form.notes ?? ''} onChange={e => set('notes', e.target.value)} />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export default function Transactions() {
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Transaction | undefined>()
+  const [filters, setFilters] = useState({ search: '', type: '', startDate: '', endDate: '' })
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const f: any = {}
+    if (filters.search) f.search = filters.search
+    if (filters.type) f.type = filters.type
+    if (filters.startDate) f.startDate = filters.startDate
+    if (filters.endDate) f.endDate = filters.endDate
+    const [txs, cats, accts] = await Promise.all([
+      invoke<Transaction[]>('transactions:list', f),
+      invoke<Category[]>('categories:list'),
+      invoke<Account[]>('accounts:list'),
+    ])
+    setTransactions(txs)
+    setCategories(cats)
+    setAccounts(accts)
+    setLoading(false)
+  }, [filters])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleSave(tx: Partial<Transaction>) {
+    if (editing?.id) {
+      await invoke('transactions:update', editing.id, tx)
+    } else {
+      await invoke('transactions:create', tx)
+    }
+    await load()
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm('Delete this transaction?')) return
+    await invoke('transactions:delete', id)
+    await load()
+  }
+
+  const totalIncome = transactions.filter(t => ['income','refund'].includes(t.type)).reduce((s, t) => s + t.amount, 0)
+  const totalExpenses = transactions.filter(t => ['expense','charge_payment'].includes(t.type)).reduce((s, t) => s + t.amount, 0)
+  const net = totalIncome - totalExpenses
+
+  return (
+    <div className="p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">Transactions</h1>
+        <button className="btn-primary" onClick={() => { setEditing(undefined); setShowForm(true) }}>+ Add Transaction</button>
+      </div>
+
+      {/* Summary bar */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="card text-center">
+          <div className="text-xs text-gray-400 mb-1">Income</div>
+          <div className="text-lg font-semibold pos">{formatCurrency(totalIncome)}</div>
+        </div>
+        <div className="card text-center">
+          <div className="text-xs text-gray-400 mb-1">Expenses</div>
+          <div className="text-lg font-semibold neg">{formatCurrency(totalExpenses)}</div>
+        </div>
+        <div className="card text-center">
+          <div className="text-xs text-gray-400 mb-1">Net</div>
+          <div className={`text-lg font-semibold ${net >= 0 ? 'pos' : 'neg'}`}>{formatCurrency(net)}</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="card flex flex-wrap gap-3 items-center">
+        <input type="text" placeholder="Search…" className="input w-44" value={filters.search}
+          onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
+        <select className="input w-40" value={filters.type} onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}>
+          <option value="">All types</option>
+          {TX_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+        </select>
+        <input type="date" className="input w-40" value={filters.startDate}
+          onChange={e => setFilters(f => ({ ...f, startDate: e.target.value }))} />
+        <span className="text-gray-500 text-sm">to</span>
+        <input type="date" className="input w-40" value={filters.endDate}
+          onChange={e => setFilters(f => ({ ...f, endDate: e.target.value }))} />
+        <button className="btn-secondary text-xs" onClick={() => setFilters({ search: '', type: '', startDate: '', endDate: '' })}>
+          Clear
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="card p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-800 text-left">
+              <th className="px-4 py-3 text-gray-400 font-medium">Date</th>
+              <th className="px-4 py-3 text-gray-400 font-medium">Description</th>
+              <th className="px-4 py-3 text-gray-400 font-medium">Type</th>
+              <th className="px-4 py-3 text-gray-400 font-medium">Category</th>
+              <th className="px-4 py-3 text-gray-400 font-medium">Account</th>
+              <th className="px-4 py-3 text-gray-400 font-medium text-right">Amount</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
+            )}
+            {!loading && transactions.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No transactions found.</td></tr>
+            )}
+            {transactions.map(tx => (
+              <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{formatDate(tx.date)}</td>
+                <td className="px-4 py-3 text-gray-100 max-w-xs truncate">{tx.description}</td>
+                <td className="px-4 py-3"><TypeBadge type={tx.type} /></td>
+                <td className="px-4 py-3 text-gray-400">{tx.category_name ?? '—'}</td>
+                <td className="px-4 py-3 text-gray-400">{tx.account_name ?? '—'}</td>
+                <td className={`px-4 py-3 text-right font-mono font-medium ${['income','refund'].includes(tx.type) ? 'pos' : ['expense','charge_payment','loan_payment'].includes(tx.type) ? 'neg' : 'neutral'}`}>
+                  {formatCurrency(tx.amount)}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-1.5 justify-end">
+                    <button className="btn-secondary py-1 px-2 text-xs" onClick={() => { setEditing(tx); setShowForm(true) }}>Edit</button>
+                    <button className="btn-danger py-1 px-2 text-xs" onClick={() => handleDelete(tx.id!)}>Del</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showForm && (
+        <TxForm
+          initial={editing}
+          categories={categories}
+          accounts={accounts}
+          onSave={handleSave}
+          onClose={() => { setShowForm(false); setEditing(undefined) }}
+        />
+      )}
+    </div>
+  )
+}

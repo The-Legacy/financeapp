@@ -1,4 +1,3 @@
-import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
@@ -12,18 +11,18 @@ export default defineConfig({
   preload: {
     input: 'src/preload/index.ts',
     build: {
-      outDir: 'dist/preload'
-    },
-    vite: {
-      build: {
-        rollupOptions: {
-          external: ['electron']
+      outDir: 'dist/preload',
+      rollupOptions: {
+        external: ['electron'],
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].js'
         }
       }
     }
   },
   renderer: {
-    root: '.',
+    root: 'src/renderer',
     input: 'src/renderer/index.html',
     build: {
       outDir: 'dist/renderer'
