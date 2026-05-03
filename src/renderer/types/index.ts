@@ -17,6 +17,7 @@ export interface Transaction {
   // Joined
   category_name?: string
   account_name?: string
+  loan_name?: string
 }
 
 export interface Category {
@@ -58,7 +59,8 @@ export interface BudgetProfile {
 export interface BudgetItem {
   id?: number
   budget_profile_id: number
-  category_id: number
+  category_id?: number | null
+  linked_loan_id?: number | null
   monthly_limit: number
   notes?: string
   category_name?: string
@@ -127,7 +129,8 @@ export interface SpendingByCategory {
 }
 
 export interface EffectiveBudgetItem {
-  category_id: number
+  category_id?: number | null
+  linked_loan_id?: number | null
   category_name: string
   monthly_limit: number
 }

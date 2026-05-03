@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
 import { formatCurrency, formatMonth, currentMonth, monthStart, monthEnd } from '../../lib/formatters'
 import { useConfirm } from '../../components/ConfirmDialog'
-import type { BudgetProfile, BudgetItem, Category, MonthBudgetAssignment, EffectiveBudgetItem, Transaction } from '../../types'
+import type { BudgetProfile, BudgetItem, Category, MonthBudgetAssignment, EffectiveBudgetItem, Loan } from '../../types'
 
 // ---- Budget Profile Form ----
 function ProfileForm({ initial, onSave, onClose }: {
@@ -53,13 +53,18 @@ function ProfileForm({ initial, onSave, onClose }: {
 }
 
 // ---- Budget Items Editor ----
-function BudgetItemsEditor({ profile, categories, onClose }: {
+type BudgetTargetOption =
+  | { value: string; label: string; category_id: number; linked_loan_id?: null }
+  | { value: string; label: string; category_id?: null; linked_loan_id: number }
+
+function BudgetItemsEditor({ profile, categories, loans, onClose }: {
   profile: BudgetProfile
   categories: Category[]
+  loans: Loan[]
   onClose: () => void
 }) {
   const [items, setItems] = useState<BudgetItem[]>([])
-  const [adding, setAdding] = useState<{ category_id: number; monthly_limit: number }>({ category_id: 0, monthly_limit: 0 })
+  const [adding, setAdding] = useState<{ target: string; monthly_limit: number }>({ target: '', monthly_limit: 0 })
 
   useEffect(() => {
     invoke<BudgetItem[]>('budgets:items:list', profile.id).then(setItems)
@@ -77,6 +82,22 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
   }
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
+  const activeLoans = loans.filter(loan => loan.status === 'active')
+  const targetOptions: BudgetTargetOption[] = [
+    ...expenseCategories.map(category => ({
+      value: `category:${category.id}`,
+      label: category.name,
+      category_id: category.id!,
+      linked_loan_id: null,
+    })),
+    ...activeLoans.map(loan => ({
+      value: `loan:${loan.id}`,
+      label: `${loan.name} (Loan)`,
+      category_id: null,
+      linked_loan_id: loan.id!,
+    })),
+  ]
+  const existingTargets = new Set(items.map(item => item.linked_loan_id ? `loan:${item.linked_loan_id}` : `category:${item.category_id}`))
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -94,7 +115,13 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
                 className="input w-28 text-right"
                 defaultValue={item.monthly_limit}
                 onBlur={async (e) => {
-                  await handleUpsert({ budget_profile_id: profile.id!, category_id: item.category_id, monthly_limit: e.target.value === '' ? 0 : parseFloat(e.target.value), notes: item.notes })
+                  await handleUpsert({
+                    budget_profile_id: profile.id!,
+                    category_id: item.category_id ?? null,
+                    linked_loan_id: item.linked_loan_id ?? null,
+                    monthly_limit: e.target.value === '' ? 0 : parseFloat(e.target.value),
+                    notes: item.notes,
+                  })
                 }}
               />
               <button className="btn-danger py-1 px-2 text-xs" onClick={() => handleDelete(item.id!)}>✕</button>
@@ -103,11 +130,11 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
         </div>
         <div className="mt-4 pt-4 border-t t-divider flex gap-2 items-end">
           <div className="flex-1">
-            <label className="label">Add Category</label>
-            <select className="input" value={adding.category_id} onChange={e => setAdding(a => ({ ...a, category_id: Number(e.target.value) }))}>
-              <option value={0}>— Select —</option>
-              {expenseCategories.filter(c => !items.find(i => i.category_id === c.id)).map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+            <label className="label">Add Item</label>
+            <select className="input" value={adding.target} onChange={e => setAdding(a => ({ ...a, target: e.target.value }))}>
+              <option value="">— Select —</option>
+              {targetOptions.filter(option => !existingTargets.has(option.value)).map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </div>
@@ -117,9 +144,17 @@ function BudgetItemsEditor({ profile, categories, onClose }: {
               onChange={e => setAdding(a => ({ ...a, monthly_limit: e.target.value === '' ? 0 : parseFloat(e.target.value) }))} />
           </div>
           <button className="btn-primary" onClick={async () => {
-            if (!adding.category_id) return
-            await handleUpsert({ budget_profile_id: profile.id!, ...adding, notes: '' })
-            setAdding({ category_id: 0, monthly_limit: 0 })
+            if (!adding.target) return
+            const target = targetOptions.find(option => option.value === adding.target)
+            if (!target) return
+            await handleUpsert({
+              budget_profile_id: profile.id!,
+              category_id: target.category_id ?? null,
+              linked_loan_id: target.linked_loan_id ?? null,
+              monthly_limit: adding.monthly_limit,
+              notes: '',
+            })
+            setAdding({ target: '', monthly_limit: 0 })
           }}>Add</button>
         </div>
       </div>
@@ -266,6 +301,7 @@ function MonthSummary({ month, profiles }: { month: string; profiles: BudgetProf
 export default function Budgets() {
   const [profiles, setProfiles] = useState<BudgetProfile[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [loans, setLoans] = useState<Loan[]>([])
   const [showProfileForm, setShowProfileForm] = useState(false)
   const [editingProfile, setEditingProfile] = useState<BudgetProfile | undefined>()
   const [editingItems, setEditingItems] = useState<BudgetProfile | undefined>()
@@ -278,12 +314,14 @@ export default function Budgets() {
   })
 
   const load = useCallback(async () => {
-    const [profs, cats] = await Promise.all([
+    const [profs, cats, loanList] = await Promise.all([
       invoke<BudgetProfile[]>('budgets:profiles:list'),
       invoke<Category[]>('categories:list'),
+      invoke<Loan[]>('loans:list'),
     ])
     setProfiles(profs)
     setCategories(cats)
+    setLoans(loanList)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -351,6 +389,7 @@ export default function Budgets() {
         <BudgetItemsEditor
           profile={editingItems}
           categories={categories}
+          loans={loans}
           onClose={() => setEditingItems(undefined)}
         />
       )}

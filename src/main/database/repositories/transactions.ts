@@ -20,6 +20,7 @@ export interface Transaction {
   // Joined fields
   category_name?: string
   account_name?: string
+  loan_name?: string
 }
 
 export interface TransactionFilters {
@@ -35,9 +36,10 @@ export interface TransactionFilters {
 export function getTransactions(filters: TransactionFilters = {}): Transaction[] {
   const db = getDb()
   let sql = `
-    SELECT t.*, c.name as category_name, a.name as account_name
+    SELECT t.*, COALESCE(c.name, l.name) as category_name, a.name as account_name, l.name as loan_name
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN loans l ON t.linked_loan_id = l.id
     LEFT JOIN accounts a ON t.account_id = a.id
     WHERE t.deleted = 0
   `
@@ -61,9 +63,10 @@ export function getTransactions(filters: TransactionFilters = {}): Transaction[]
 export function getTransactionById(id: number): Transaction | undefined {
   const db = getDb()
   return db.prepare(`
-    SELECT t.*, c.name as category_name, a.name as account_name
+    SELECT t.*, COALESCE(c.name, l.name) as category_name, a.name as account_name, l.name as loan_name
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN loans l ON t.linked_loan_id = l.id
     LEFT JOIN accounts a ON t.account_id = a.id
     WHERE t.id = ? AND t.deleted = 0
   `).get(id) as Transaction | undefined
@@ -138,11 +141,14 @@ export function getTransactionSummary(startDate: string, endDate: string) {
 export function getSpendingByCategory(startDate: string, endDate: string) {
   const db = getDb()
   return db.prepare(`
-    SELECT c.name as category, c.color, SUM(t.amount) as total
+    SELECT COALESCE(c.name, l.name) as category,
+      COALESCE(c.color, '#f97316') as color,
+      SUM(t.amount) as total
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
+    LEFT JOIN loans l ON t.linked_loan_id = l.id
     WHERE t.deleted = 0 AND t.type IN ('expense','charge_payment') AND t.date >= ? AND t.date <= ?
-    GROUP BY t.category_id
+    GROUP BY COALESCE('category:' || t.category_id, 'loan:' || t.linked_loan_id)
     ORDER BY total DESC
   `).all(startDate, endDate) as Array<{ category: string; color: string; total: number }>
 }

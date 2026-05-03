@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { invoke } from '../../lib/api'
 import { formatCurrency, formatDate, today, toLabel } from '../../lib/formatters'
 import { useConfirm } from '../../components/ConfirmDialog'
-import type { Transaction, Category, Account } from '../../types'
+import type { Transaction, Category, Account, Loan } from '../../types'
 
 const TX_TYPES = ['income','expense','cc_payment','transfer','loan_payment','charge_payment','refund','adjustment','investment_buy','investment_sell']
 
@@ -20,17 +20,67 @@ interface TxFormProps {
   initial?: Partial<Transaction>
   categories: Category[]
   accounts: Account[]
+  loans: Loan[]
   onSave: (tx: Partial<Transaction>) => Promise<void>
   onClose: () => void
 }
 
-function TxForm({ initial, categories, accounts, onSave, onClose }: TxFormProps) {
+type ExpenseTargetOption =
+  | { value: string; label: string; kind: 'category' }
+  | { value: string; label: string; kind: 'loan' }
+
+function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFormProps) {
   const [form, setForm] = useState<Partial<Transaction>>({
     date: today(), type: 'expense', amount: 0, description: '', ...initial
   })
   const [saving, setSaving] = useState(false)
 
+  const expenseCategories = categories.filter(c => c.type === 'expense')
+  const nonExpenseCategories = categories.filter(c => c.type !== 'expense')
+  const activeLoans = loans.filter(loan => loan.status === 'active')
+  const expenseTargetOptions: ExpenseTargetOption[] = [
+    ...expenseCategories.map(category => ({
+      value: `category:${category.id}`,
+      label: category.name,
+      kind: 'category' as const,
+    })),
+    ...activeLoans.map(loan => ({
+      value: `loan:${loan.id}`,
+      label: `${loan.name} (Loan)`,
+      kind: 'loan' as const,
+    })),
+  ]
+  const genericCategoryOptions: ExpenseTargetOption[] = categories.map(category => ({
+    value: `category:${category.id}`,
+    label: category.name,
+    kind: 'category' as const,
+  }))
+
+  const targetOptions = form.type === 'expense' ? expenseTargetOptions : genericCategoryOptions
+  const targetLabel = form.type === 'expense' ? 'Expense / Loan' : 'Category'
+
+  const selectedExpenseTarget = form.linked_loan_id
+    ? `loan:${form.linked_loan_id}`
+    : form.category_id
+      ? `category:${form.category_id}`
+      : ''
+
   const set = (key: keyof Transaction, val: any) => setForm(f => ({ ...f, [key]: val }))
+
+  function setExpenseTarget(value: string) {
+    if (!value) {
+      setForm(f => ({ ...f, category_id: null, linked_loan_id: null }))
+      return
+    }
+
+    const [kind, rawId] = value.split(':')
+    const id = Number(rawId)
+    setForm(f => ({
+      ...f,
+      category_id: kind === 'category' ? id : null,
+      linked_loan_id: kind === 'loan' && f.type === 'expense' ? id : null,
+    }))
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -70,10 +120,10 @@ function TxForm({ initial, categories, accounts, onSave, onClose }: TxFormProps)
               <input type="number" step="0.01" min="0" className="input" value={form.amount ?? ''} onChange={e => set('amount', e.target.value === '' ? 0 : parseFloat(e.target.value))} required />
             </div>
             <div>
-              <label className="label">Category</label>
-              <select className="input" value={form.category_id ?? ''} onChange={e => set('category_id', e.target.value ? Number(e.target.value) : null)}>
+              <label className="label">{targetLabel}</label>
+              <select className="input" value={selectedExpenseTarget} onChange={e => setExpenseTarget(e.target.value)}>
                 <option value="">— None —</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {targetOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
           </div>
@@ -108,6 +158,7 @@ export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Transaction | undefined>()
@@ -122,14 +173,16 @@ export default function Transactions() {
     if (filters.accountId) f.account_id = Number(filters.accountId)
     if (filters.startDate) f.startDate = filters.startDate
     if (filters.endDate) f.endDate = filters.endDate
-    const [txs, cats, accts] = await Promise.all([
+    const [txs, cats, accts, loanList] = await Promise.all([
       invoke<Transaction[]>('transactions:list', f),
       invoke<Category[]>('categories:list'),
       invoke<Account[]>('accounts:list'),
+      invoke<Loan[]>('loans:list'),
     ])
     setTransactions(txs)
     setCategories(cats)
     setAccounts(accts)
+    setLoans(loanList)
     setLoading(false)
   }, [filters])
 
@@ -247,6 +300,7 @@ export default function Transactions() {
           initial={editing}
           categories={categories}
           accounts={accounts}
+          loans={loans}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(undefined) }}
         />

@@ -81,10 +81,11 @@ export function runMigrations(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS budget_items (
       id                INTEGER PRIMARY KEY AUTOINCREMENT,
       budget_profile_id INTEGER NOT NULL REFERENCES budget_profiles(id) ON DELETE CASCADE,
-      category_id       INTEGER NOT NULL REFERENCES categories(id),
+      category_id       INTEGER REFERENCES categories(id),
+      linked_loan_id    INTEGER REFERENCES loans(id),
       monthly_limit     REAL NOT NULL DEFAULT 0,
       notes             TEXT,
-      UNIQUE(budget_profile_id, category_id)
+      CHECK ((category_id IS NOT NULL AND linked_loan_id IS NULL) OR (category_id IS NULL AND linked_loan_id IS NOT NULL))
     );
 
     -- Month Budget Assignments (which profile applies to each YYYY-MM)
@@ -291,6 +292,44 @@ export function runMigrations(db: Database.Database): void {
     `)
     db.pragma('foreign_keys = ON')
   }
+
+  const budgetItemsSchemaRow = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='budget_items'"
+  ).get() as { sql: string } | undefined
+  if (budgetItemsSchemaRow && !budgetItemsSchemaRow.sql.includes('linked_loan_id')) {
+    db.pragma('foreign_keys = OFF')
+    const migrateBudgetItems = db.transaction(() => {
+      db.prepare(`
+        CREATE TABLE budget_items_v2 (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          budget_profile_id INTEGER NOT NULL REFERENCES budget_profiles(id) ON DELETE CASCADE,
+          category_id       INTEGER REFERENCES categories(id),
+          linked_loan_id    INTEGER REFERENCES loans(id),
+          monthly_limit     REAL NOT NULL DEFAULT 0,
+          notes             TEXT,
+          CHECK ((category_id IS NOT NULL AND linked_loan_id IS NULL) OR (category_id IS NULL AND linked_loan_id IS NOT NULL))
+        )
+      `).run()
+      db.prepare(`
+        INSERT INTO budget_items_v2 (id, budget_profile_id, category_id, monthly_limit, notes)
+        SELECT id, budget_profile_id, category_id, monthly_limit, notes FROM budget_items
+      `).run()
+      db.prepare('DROP TABLE budget_items').run()
+      db.prepare('ALTER TABLE budget_items_v2 RENAME TO budget_items').run()
+    })
+    migrateBudgetItems()
+    db.pragma('foreign_keys = ON')
+  }
+
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_items_profile_category
+    ON budget_items(budget_profile_id, category_id)
+    WHERE category_id IS NOT NULL;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_items_profile_loan
+    ON budget_items(budget_profile_id, linked_loan_id)
+    WHERE linked_loan_id IS NOT NULL;
+  `)
 
   // Seed default categories if none exist
   const count = (db.prepare('SELECT COUNT(*) as c FROM categories').get() as any).c

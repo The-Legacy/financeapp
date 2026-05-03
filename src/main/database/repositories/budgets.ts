@@ -12,7 +12,8 @@ export interface BudgetProfile {
 export interface BudgetItem {
   id?: number
   budget_profile_id: number
-  category_id: number
+  category_id?: number | null
+  linked_loan_id?: number | null
   monthly_limit: number
   notes?: string
   // Joined
@@ -72,21 +73,61 @@ export function deleteBudgetProfile(id: number): void {
 
 export function getBudgetItems(profileId: number): BudgetItem[] {
   return getDb().prepare(`
-    SELECT bi.*, c.name as category_name, c.color as category_color
+    SELECT bi.*,
+      COALESCE(c.name, l.name) as category_name,
+      COALESCE(c.color, '#f97316') as category_color
     FROM budget_items bi
-    JOIN categories c ON bi.category_id = c.id
+    LEFT JOIN categories c ON bi.category_id = c.id
+    LEFT JOIN loans l ON bi.linked_loan_id = l.id
     WHERE bi.budget_profile_id = ?
-    ORDER BY c.name
+    ORDER BY COALESCE(c.name, l.name)
   `).all(profileId) as BudgetItem[]
 }
 
 export function upsertBudgetItem(item: Omit<BudgetItem, 'id' | 'category_name' | 'category_color'>): void {
-  getDb().prepare(`
-    INSERT INTO budget_items (budget_profile_id, category_id, monthly_limit, notes)
-    VALUES (@budget_profile_id, @category_id, @monthly_limit, @notes)
-    ON CONFLICT(budget_profile_id, category_id)
-    DO UPDATE SET monthly_limit = excluded.monthly_limit, notes = excluded.notes
-  `).run(item)
+  const db = getDb()
+  const params = {
+    budget_profile_id: item.budget_profile_id,
+    category_id: item.category_id ?? null,
+    linked_loan_id: item.linked_loan_id ?? null,
+    monthly_limit: item.monthly_limit,
+    notes: item.notes ?? null,
+  }
+
+  if (params.category_id == null && params.linked_loan_id == null) {
+    throw new Error('Budget item must reference a category or loan')
+  }
+
+  if (params.category_id != null && params.linked_loan_id != null) {
+    throw new Error('Budget item cannot reference both a category and loan')
+  }
+
+  if (params.category_id != null) {
+    const updated = db.prepare(`
+      UPDATE budget_items
+      SET monthly_limit = @monthly_limit, notes = @notes
+      WHERE budget_profile_id = @budget_profile_id AND category_id = @category_id
+    `).run(params)
+    if (updated.changes === 0) {
+      db.prepare(`
+        INSERT INTO budget_items (budget_profile_id, category_id, linked_loan_id, monthly_limit, notes)
+        VALUES (@budget_profile_id, @category_id, NULL, @monthly_limit, @notes)
+      `).run(params)
+    }
+    return
+  }
+
+  const updated = db.prepare(`
+    UPDATE budget_items
+    SET monthly_limit = @monthly_limit, notes = @notes
+    WHERE budget_profile_id = @budget_profile_id AND linked_loan_id = @linked_loan_id
+  `).run(params)
+  if (updated.changes === 0) {
+    db.prepare(`
+      INSERT INTO budget_items (budget_profile_id, category_id, linked_loan_id, monthly_limit, notes)
+      VALUES (@budget_profile_id, NULL, @linked_loan_id, @monthly_limit, @notes)
+    `).run(params)
+  }
 }
 
 export function deleteBudgetItem(id: number): void {
@@ -120,6 +161,7 @@ export function finalizeMonth(month: string): void {
 
   const snapshotItems = items.map(i => ({
     category_id: i.category_id,
+    linked_loan_id: i.linked_loan_id,
     category_name: i.category_name,
     monthly_limit: i.monthly_limit
   }))
@@ -144,7 +186,7 @@ export function getBudgetSnapshot(month: string): BudgetSnapshot | undefined {
  * If the month is finalized, uses the frozen snapshot.
  * Otherwise uses the currently assigned profile.
  */
-export function getEffectiveBudgetItems(month: string): Array<{ category_id: number; category_name: string; monthly_limit: number }> {
+export function getEffectiveBudgetItems(month: string): Array<{ category_id?: number | null; linked_loan_id?: number | null; category_name: string; monthly_limit: number }> {
   const snapshot = getBudgetSnapshot(month)
   if (snapshot) {
     return JSON.parse(snapshot.snapshot_items_json)
@@ -153,6 +195,7 @@ export function getEffectiveBudgetItems(month: string): Array<{ category_id: num
   if (!assignment) return []
   return getBudgetItems(assignment.budget_profile_id).map(i => ({
     category_id: i.category_id,
+    linked_loan_id: i.linked_loan_id,
     category_name: i.category_name ?? '',
     monthly_limit: i.monthly_limit
   }))

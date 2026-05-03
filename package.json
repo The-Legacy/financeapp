@@ -2,13 +2,52 @@
   "name": "desktop-finance-app",
   "version": "0.1.0",
   "description": "Desktop Finance Application",
+  "author": "Desktop Finance App Contributors",
   "main": "dist/main/index.js",
+  "build": {
+    "appId": "com.desktopfinanceapp.app",
+    "productName": "Desktop Finance App",
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "beforePack": "./scripts/electron-builder.before-pack.cjs",
+    "files": [
+      "dist",
+      "node_modules"
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.finance"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    }
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "pack": "electron-builder",
     "dist": "npm run build && electron-builder",
+    "postinstall": "electron-builder install-app-deps",
     "typecheck": "tsc --noEmit",
     "rebuild": "electron-rebuild -f -w better-sqlite3"
   },
