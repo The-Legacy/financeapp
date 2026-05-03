@@ -78,7 +78,9 @@ function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFor
   function setType(nextType: string) {
     setForm(f => {
       const next: Partial<Transaction> = { ...f, type: nextType as Transaction['type'] }
-      if (nextType !== 'loan_payment') {
+      if (nextType === 'loan_payment') {
+        next.category_id = null
+      } else {
         next.linked_loan_id = null
       }
       return next
@@ -223,7 +225,7 @@ export default function Transactions() {
   }
 
   const totalIncome = transactions.filter(t => ['income','refund'].includes(t.type)).reduce((s, t) => s + t.amount, 0)
-  const totalExpenses = transactions.filter(t => ['expense','charge_payment'].includes(t.type)).reduce((s, t) => s + t.amount, 0)
+  const totalExpenses = transactions.filter(t => ['expense','charge_payment','loan_payment'].includes(t.type)).reduce((s, t) => s + t.amount, 0)
   const net = totalIncome - totalExpenses
 
   return (

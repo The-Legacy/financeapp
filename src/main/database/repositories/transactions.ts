@@ -41,6 +41,10 @@ function applyLoanPaymentDelta(loanId: number, paymentDelta: number): void {
     throw new Error(`Loan ${loanId} not found`)
   }
 
+  if (paymentDelta > 0 && paymentDelta > loan.current_balance) {
+    throw new Error(`Loan payment exceeds remaining balance for loan ${loanId}`)
+  }
+
   const nextBalance = Math.max(0, loan.current_balance - paymentDelta)
   const nextStatus = nextBalance === 0 ? 'paid_off' : loan.status === 'paid_off' ? 'active' : loan.status
 
@@ -214,7 +218,7 @@ export function getTransactionSummary(startDate: string, endDate: string) {
   let income = 0, expenses = 0
   for (const row of rows) {
     if (['income', 'refund'].includes(row.type)) income += row.total
-    else if (['expense', 'charge_payment'].includes(row.type)) expenses += row.total
+    else if (['expense', 'charge_payment', 'loan_payment'].includes(row.type)) expenses += row.total
   }
   return { income, expenses, net: income - expenses, rows }
 }
@@ -228,7 +232,7 @@ export function getSpendingByCategory(startDate: string, endDate: string) {
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
     LEFT JOIN loans l ON t.linked_loan_id = l.id
-    WHERE t.deleted = 0 AND t.type IN ('expense','charge_payment') AND t.date >= ? AND t.date <= ?
+    WHERE t.deleted = 0 AND t.type IN ('expense','charge_payment','loan_payment') AND t.date >= ? AND t.date <= ?
     GROUP BY COALESCE('category:' || t.category_id, 'loan:' || t.linked_loan_id)
     ORDER BY total DESC
   `).all(startDate, endDate) as Array<{ category: string; color: string; total: number }>
