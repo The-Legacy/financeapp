@@ -36,19 +36,19 @@ function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFor
   const [saving, setSaving] = useState(false)
 
   const expenseCategories = categories.filter(c => c.type === 'expense')
-  const nonExpenseCategories = categories.filter(c => c.type !== 'expense')
   const activeLoans = loans.filter(loan => loan.status === 'active')
+  const loanTargetOptions: ExpenseTargetOption[] = activeLoans.map(loan => ({
+    value: `loan:${loan.id}`,
+    label: `${loan.name} (Loan)`,
+    kind: 'loan' as const,
+  }))
   const expenseTargetOptions: ExpenseTargetOption[] = [
     ...expenseCategories.map(category => ({
       value: `category:${category.id}`,
       label: category.name,
       kind: 'category' as const,
     })),
-    ...activeLoans.map(loan => ({
-      value: `loan:${loan.id}`,
-      label: `${loan.name} (Loan)`,
-      kind: 'loan' as const,
-    })),
+    ...loanTargetOptions,
   ]
   const genericCategoryOptions: ExpenseTargetOption[] = categories.map(category => ({
     value: `category:${category.id}`,
@@ -56,8 +56,16 @@ function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFor
     kind: 'category' as const,
   }))
 
-  const targetOptions = form.type === 'expense' ? expenseTargetOptions : genericCategoryOptions
-  const targetLabel = form.type === 'expense' ? 'Expense / Loan' : 'Category'
+  const targetOptions = form.type === 'loan_payment'
+    ? loanTargetOptions
+    : form.type === 'expense'
+      ? expenseTargetOptions
+      : genericCategoryOptions
+  const targetLabel = form.type === 'loan_payment'
+    ? 'Loan'
+    : form.type === 'expense'
+      ? 'Expense / Loan'
+      : 'Category'
 
   const selectedExpenseTarget = form.linked_loan_id
     ? `loan:${form.linked_loan_id}`
@@ -66,6 +74,16 @@ function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFor
       : ''
 
   const set = (key: keyof Transaction, val: any) => setForm(f => ({ ...f, [key]: val }))
+
+  function setType(nextType: string) {
+    setForm(f => {
+      const next: Partial<Transaction> = { ...f, type: nextType as Transaction['type'] }
+      if (nextType !== 'loan_payment') {
+        next.linked_loan_id = null
+      }
+      return next
+    })
+  }
 
   function setExpenseTarget(value: string) {
     if (!value) {
@@ -77,8 +95,9 @@ function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFor
     const id = Number(rawId)
     setForm(f => ({
       ...f,
+      type: kind === 'loan' ? 'loan_payment' : f.type === 'loan_payment' ? 'expense' : f.type,
       category_id: kind === 'category' ? id : null,
-      linked_loan_id: kind === 'loan' && f.type === 'expense' ? id : null,
+      linked_loan_id: kind === 'loan' ? id : null,
     }))
   }
 
@@ -105,7 +124,7 @@ function TxForm({ initial, categories, accounts, loans, onSave, onClose }: TxFor
             </div>
             <div>
               <label className="label">Type</label>
-              <select className="input" value={form.type ?? 'expense'} onChange={e => set('type', e.target.value as any)}>
+              <select className="input" value={form.type ?? 'expense'} onChange={e => setType(e.target.value)}>
                 {TX_TYPES.map(t => <option key={t} value={t}>{toLabel(t)}</option>)}
               </select>
             </div>

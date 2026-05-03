@@ -23,6 +23,56 @@ export interface Transaction {
   loan_name?: string
 }
 
+function getLoanPaymentEffect(tx: Pick<Transaction, 'type' | 'amount' | 'linked_loan_id'>): { loanId: number; payment: number } | null {
+  if (tx.type !== 'loan_payment' || tx.linked_loan_id == null) {
+    return null
+  }
+  return { loanId: tx.linked_loan_id, payment: tx.amount }
+}
+
+function applyLoanPaymentDelta(loanId: number, paymentDelta: number): void {
+  if (paymentDelta === 0) {
+    return
+  }
+
+  const db = getDb()
+  const loan = db.prepare('SELECT current_balance, status FROM loans WHERE id = ?').get(loanId) as { current_balance: number; status: string } | undefined
+  if (!loan) {
+    throw new Error(`Loan ${loanId} not found`)
+  }
+
+  const nextBalance = Math.max(0, loan.current_balance - paymentDelta)
+  const nextStatus = nextBalance === 0 ? 'paid_off' : loan.status === 'paid_off' ? 'active' : loan.status
+
+  db.prepare(`
+    UPDATE loans
+    SET current_balance = ?, status = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(nextBalance, nextStatus, loanId)
+}
+
+function applyLoanDeltaFromTransition(previousTx: Pick<Transaction, 'type' | 'amount' | 'linked_loan_id'>, nextTx: Pick<Transaction, 'type' | 'amount' | 'linked_loan_id'>): void {
+  const prev = getLoanPaymentEffect(previousTx)
+  const next = getLoanPaymentEffect(nextTx)
+
+  if (prev?.loanId === next?.loanId) {
+    if (prev && next) {
+      applyLoanPaymentDelta(prev.loanId, next.payment - prev.payment)
+    }
+    return
+  }
+
+  if (prev) {
+    // Revert the previous payment from the old loan.
+    applyLoanPaymentDelta(prev.loanId, -prev.payment)
+  }
+
+  if (next) {
+    // Apply the new payment to the selected loan.
+    applyLoanPaymentDelta(next.loanId, next.payment)
+  }
+}
+
 export interface TransactionFilters {
   startDate?: string
   endDate?: string
@@ -88,13 +138,20 @@ export function createTransaction(tx: Omit<Transaction, 'id' | 'created_at' | 'u
     linked_charge_id: tx.linked_charge_id ?? null,
     linked_investment_id: tx.linked_investment_id ?? null,
   }
-  const result = db.prepare(`
-    INSERT INTO transactions (date, type, category_id, subcategory, description, amount, account_id,
-      payment_method, notes, linked_loan_id, linked_charge_id, linked_investment_id)
-    VALUES (@date, @type, @category_id, @subcategory, @description, @amount, @account_id,
-      @payment_method, @notes, @linked_loan_id, @linked_charge_id, @linked_investment_id)
-  `).run(params)
-  return getTransactionById(result.lastInsertRowid as number)!
+  const txId = db.transaction(() => {
+    const result = db.prepare(`
+      INSERT INTO transactions (date, type, category_id, subcategory, description, amount, account_id,
+        payment_method, notes, linked_loan_id, linked_charge_id, linked_investment_id)
+      VALUES (@date, @type, @category_id, @subcategory, @description, @amount, @account_id,
+        @payment_method, @notes, @linked_loan_id, @linked_charge_id, @linked_investment_id)
+    `).run(params)
+    applyLoanDeltaFromTransition(
+      { type: 'expense', amount: 0, linked_loan_id: null },
+      { type: params.type, amount: params.amount, linked_loan_id: params.linked_loan_id }
+    )
+    return result.lastInsertRowid as number
+  })()
+  return getTransactionById(txId)!
 }
 
 const ALLOWED_TX_UPDATE_FIELDS = new Set([
@@ -105,20 +162,44 @@ const ALLOWED_TX_UPDATE_FIELDS = new Set([
 
 export function updateTransaction(id: number, tx: Partial<Transaction>): Transaction {
   const db = getDb()
+  const before = db.prepare('SELECT type, amount, linked_loan_id FROM transactions WHERE id = ?').get(id) as Pick<Transaction, 'type' | 'amount' | 'linked_loan_id'> | undefined
+  if (!before) {
+    throw new Error(`Transaction ${id} not found`)
+  }
+
   const fields = Object.keys(tx)
     .filter(k => ALLOWED_TX_UPDATE_FIELDS.has(k))
     .map(k => `${k} = @${k}`)
     .join(', ')
   if (!fields) throw new Error('No valid fields to update')
-  db.prepare(`UPDATE transactions SET ${fields}, updated_at = datetime('now') WHERE id = @id`)
-    .run({ ...tx, id })
+
+  db.transaction(() => {
+    db.prepare(`UPDATE transactions SET ${fields}, updated_at = datetime('now') WHERE id = @id`)
+      .run({ ...tx, id })
+
+    const after = db.prepare('SELECT type, amount, linked_loan_id FROM transactions WHERE id = ?').get(id) as Pick<Transaction, 'type' | 'amount' | 'linked_loan_id'> | undefined
+    if (!after) {
+      throw new Error(`Transaction ${id} not found after update`)
+    }
+
+    applyLoanDeltaFromTransition(before, after)
+  })()
+
   return getTransactionById(id)!
 }
 
 export function deleteTransaction(id: number): void {
   const db = getDb()
-  // Soft delete
-  db.prepare("UPDATE transactions SET deleted = 1, updated_at = datetime('now') WHERE id = ?").run(id)
+  const before = db.prepare('SELECT type, amount, linked_loan_id, deleted FROM transactions WHERE id = ?').get(id) as (Pick<Transaction, 'type' | 'amount' | 'linked_loan_id'> & { deleted: number }) | undefined
+  if (!before || before.deleted === 1) {
+    return
+  }
+
+  db.transaction(() => {
+    // Soft delete
+    db.prepare("UPDATE transactions SET deleted = 1, updated_at = datetime('now') WHERE id = ?").run(id)
+    applyLoanDeltaFromTransition(before, { type: 'expense', amount: 0, linked_loan_id: null })
+  })()
 }
 
 export function getTransactionSummary(startDate: string, endDate: string) {
