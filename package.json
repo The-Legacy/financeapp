@@ -2,7 +2,10 @@
   "name": "desktop-finance-app",
   "version": "0.1.0",
   "description": "Desktop Finance Application",
-  "author": "Desktop Finance App Contributors",
+  "author": {
+    "name": "Desktop Finance App Contributors",
+    "email": "financeapp@example.com"
+  },
   "main": "dist/main/index.js",
   "build": {
     "appId": "com.desktopfinanceapp.app",
@@ -38,7 +41,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Office"
+      "category": "Office",
+      "maintainer": "Desktop Finance App Contributors <financeapp@example.com>"
     }
   },
   "scripts": {
